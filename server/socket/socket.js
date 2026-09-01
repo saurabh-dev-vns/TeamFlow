@@ -38,7 +38,7 @@ const initSocket = (io) => {
   io.on('connection', (socket) => {
     const userId = String(socket.user._id);
     socket.join(`user:${userId}`);
-    // console.log(`Socket connected: ${socket.user.name} (${socket.id})`);
+    console.log(`Socket connected: ${socket.user.name} (${socket.id})`);
 
     // SECURITY: only let a socket join a project room if the connected user
     // is actually an admin, the project owner, or a project member —

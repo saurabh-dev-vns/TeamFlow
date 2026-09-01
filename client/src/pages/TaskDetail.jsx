@@ -10,6 +10,7 @@ import Avatar from '../components/Avatar';
 import LoadingSpinner from '../components/LoadingSpinner';
 import TaskFormModal from '../components/TaskFormModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ActivityFeed from '../components/ActivityFeed';
 import { formatDate, formatRelativeTime, isOverdue } from '../utils/formatDate';
 
 const STATUS_OPTIONS = ['Todo', 'In Progress', 'Completed'];
@@ -256,6 +257,11 @@ const TaskDetail = () => {
             <Send size={16} />
           </button>
         </form>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-5 md:p-6">
+        <h3 className="text-sm font-semibold text-gray-700 mb-2">Activity</h3>
+        <ActivityFeed taskId={id} />
       </div>
 
       <TaskFormModal

@@ -8,6 +8,7 @@ const {
   addMember,
   removeMember,
 } = require('../controllers/projectController');
+const { getProjectActivity } = require('../controllers/activityController');
 const { protect, authorize } = require('../middleware/auth');
 const { validate, createProjectRules } = require('../middleware/validators');
 
@@ -24,5 +25,6 @@ router
 
 router.post('/:id/members', authorize('admin'), addMember);
 router.delete('/:id/members/:userId', authorize('admin'), removeMember);
+router.get('/:id/activity', getProjectActivity);
 
 module.exports = router;

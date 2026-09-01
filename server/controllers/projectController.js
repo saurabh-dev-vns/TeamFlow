@@ -1,7 +1,9 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const Project = require('../models/Project');
 const Task = require('../models/Task');
+const User = require('../models/User');
 const notify = require('../utils/notify');
+const logActivity = require('../utils/logActivity');
 
 // @desc    Get all projects visible to the current user
 // @route   GET /api/projects
@@ -136,6 +138,13 @@ const createProject = asyncHandler(async (req, res) => {
     });
   }
 
+  await logActivity(io, {
+    project: project._id,
+    user: req.user._id,
+    action: 'PROJECT_CREATED',
+    message: `${req.user.name} created project "${project.name}"`,
+  });
+
   res.status(201).json(populated);
 });
 
@@ -148,6 +157,13 @@ const updateProject = asyncHandler(async (req, res) => {
 
   const { name, description, status, startDate, deadline } = req.body;
 
+  const changedFields = [];
+  if (name !== undefined && name !== project.name) changedFields.push('name');
+  if (description !== undefined && description !== project.description) changedFields.push('description');
+  if (status !== undefined && status !== project.status) changedFields.push('status');
+  if (startDate !== undefined && String(startDate) !== String(project.startDate)) changedFields.push('start date');
+  if (deadline !== undefined && String(deadline) !== String(project.deadline)) changedFields.push('deadline');
+
   if (name !== undefined) project.name = name;
   if (description !== undefined) project.description = description;
   if (status !== undefined) project.status = status;
@@ -155,6 +171,17 @@ const updateProject = asyncHandler(async (req, res) => {
   if (deadline !== undefined) project.deadline = deadline;
 
   await project.save();
+
+  const io = req.app.get('io');
+  if (changedFields.length > 0) {
+    await logActivity(io, {
+      project: project._id,
+      user: req.user._id,
+      action: 'PROJECT_UPDATED',
+      message: `${req.user.name} updated ${changedFields.join(', ')} on "${project.name}"`,
+      meta: { fields: changedFields },
+    });
+  }
 
   const populated = await project.populate([
     { path: 'owner', select: 'name email avatar' },
@@ -170,6 +197,18 @@ const updateProject = asyncHandler(async (req, res) => {
 const deleteProject = asyncHandler(async (req, res) => {
   const project = await Project.findById(req.params.id);
   if (!project) return res.status(404).json({ message: 'Project not found' });
+
+  const io = req.app.get('io');
+  // Logged before deletion so the entry captures the project's name while
+  // it still exists. Activity log entries are intentionally NOT cascade-
+  // deleted with the project (unlike tasks/comments) — an audit trail that
+  // disappears along with the thing it's auditing defeats its purpose.
+  await logActivity(io, {
+    project: project._id,
+    user: req.user._id,
+    action: 'PROJECT_DELETED',
+    message: `${req.user.name} deleted project "${project.name}"`,
+  });
 
   await Task.deleteMany({ project: project._id });
   await project.deleteOne();
@@ -206,6 +245,14 @@ const addMember = asyncHandler(async (req, res) => {
     { path: 'members', select: 'name email avatar role' },
   ]);
 
+  const addedMember = populated.members.find((m) => String(m._id) === String(userId));
+  await logActivity(io, {
+    project: project._id,
+    user: req.user._id,
+    action: 'MEMBER_ADDED',
+    message: `${req.user.name} added ${addedMember?.name || 'a member'} to "${project.name}"`,
+  });
+
   res.json(populated);
 });
 
@@ -216,6 +263,8 @@ const removeMember = asyncHandler(async (req, res) => {
   const project = await Project.findById(req.params.id);
   if (!project) return res.status(404).json({ message: 'Project not found' });
 
+  const wasMember = project.members.some((m) => String(m) === String(req.params.userId));
+
   project.members = project.members.filter((m) => String(m) !== String(req.params.userId));
   await project.save();
 
@@ -223,6 +272,17 @@ const removeMember = asyncHandler(async (req, res) => {
     { path: 'owner', select: 'name email avatar' },
     { path: 'members', select: 'name email avatar role' },
   ]);
+
+  if (wasMember) {
+    const io = req.app.get('io');
+    const removedUser = await User.findById(req.params.userId).select('name');
+    await logActivity(io, {
+      project: project._id,
+      user: req.user._id,
+      action: 'MEMBER_REMOVED',
+      message: `${req.user.name} removed ${removedUser?.name || 'a member'} from "${project.name}"`,
+    });
+  }
 
   res.json(populated);
 });

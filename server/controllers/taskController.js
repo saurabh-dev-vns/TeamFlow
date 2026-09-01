@@ -3,6 +3,7 @@ const Task = require('../models/Task');
 const Project = require('../models/Project');
 const Comment = require('../models/Comment');
 const notify = require('../utils/notify');
+const logActivity = require('../utils/logActivity');
 
 // Helper: confirm the user is allowed to touch this project's tasks
 const assertProjectAccess = async (project, user) => {
@@ -139,6 +140,14 @@ const createTask = asyncHandler(async (req, res) => {
     });
   }
 
+  await logActivity(io, {
+    project,
+    task: task._id,
+    user: req.user._id,
+    action: 'TASK_CREATED',
+    message: `${req.user.name} created task "${task.title}"`,
+  });
+
   io?.to(`project:${project}`).emit('task:created', populated);
 
   res.status(201).json(populated);
@@ -161,6 +170,13 @@ const updateTask = asyncHandler(async (req, res) => {
   const { title, description, assignedTo, priority, dueDate, checklist } = req.body;
   const previousAssignee = task.assignedTo ? String(task.assignedTo) : null;
 
+  const changedFields = [];
+  if (title !== undefined && title !== task.title) changedFields.push('title');
+  if (description !== undefined && description !== task.description) changedFields.push('description');
+  if (priority !== undefined && priority !== task.priority) changedFields.push('priority');
+  if (dueDate !== undefined && String(dueDate) !== String(task.dueDate)) changedFields.push('due date');
+  if (checklist !== undefined) changedFields.push('checklist');
+
   if (title !== undefined) task.title = title;
   if (description !== undefined) task.description = description;
   if (assignedTo !== undefined) task.assignedTo = assignedTo || null;
@@ -179,6 +195,24 @@ const updateTask = asyncHandler(async (req, res) => {
       message: `${req.user.name} assigned you the task "${task.title}"`,
       relatedTask: task._id,
       relatedProject: task.project._id,
+    });
+    await logActivity(io, {
+      project: task.project._id,
+      task: task._id,
+      user: req.user._id,
+      action: 'TASK_ASSIGNED',
+      message: `${req.user.name} reassigned "${task.title}"`,
+    });
+  }
+
+  if (changedFields.length > 0) {
+    await logActivity(io, {
+      project: task.project._id,
+      task: task._id,
+      user: req.user._id,
+      action: 'TASK_UPDATED',
+      message: `${req.user.name} updated ${changedFields.join(', ')} on "${task.title}"`,
+      meta: { fields: changedFields },
     });
   }
 
@@ -213,6 +247,7 @@ const updateTaskStatus = asyncHandler(async (req, res) => {
     return res.status(403).json({ message: 'You can only update tasks assigned to you' });
   }
 
+  const previousStatus = task.status;
   task.status = status;
   await task.save();
 
@@ -223,6 +258,15 @@ const updateTaskStatus = asyncHandler(async (req, res) => {
 
   const io = req.app.get('io');
   io?.to(`project:${task.project._id}`).emit('task:updated', populated);
+
+  await logActivity(io, {
+    project: task.project._id,
+    task: task._id,
+    user: req.user._id,
+    action: 'TASK_STATUS_CHANGED',
+    message: `${req.user.name} moved "${task.title}" from ${previousStatus} to ${status}`,
+    meta: { from: previousStatus, to: status },
+  });
 
   if (task.createdBy && String(task.createdBy) !== String(req.user._id)) {
     await notify(io, {
@@ -254,6 +298,15 @@ const toggleChecklistItem = asyncHandler(async (req, res) => {
   item.completed = !item.completed;
   await task.save();
 
+  const io = req.app.get('io');
+  await logActivity(io, {
+    project: task.project._id,
+    task: task._id,
+    user: req.user._id,
+    action: 'CHECKLIST_ITEM_TOGGLED',
+    message: `${req.user.name} marked "${item.text}" as ${item.completed ? 'done' : 'not done'} on "${task.title}"`,
+  });
+
   res.json(task);
 });
 
@@ -272,6 +325,17 @@ const deleteTask = asyncHandler(async (req, res) => {
 
   const io = req.app.get('io');
   io?.to(`project:${task.project}`).emit('task:deleted', { _id: task._id, project: task.project });
+
+  // Note: task is left null here (not the deleted task's id) so this entry
+  // still shows up in the *project*-level feed even though the task itself
+  // is gone; a task-scoped feed for a deleted task is naturally empty.
+  await logActivity(io, {
+    project: task.project._id,
+    task: null,
+    user: req.user._id,
+    action: 'TASK_DELETED',
+    message: `${req.user.name} deleted task "${task.title}"`,
+  });
 
   res.json({ message: 'Task deleted successfully' });
 });

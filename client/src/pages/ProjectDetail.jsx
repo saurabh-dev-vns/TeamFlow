@@ -13,6 +13,7 @@ import TaskFormModal from '../components/TaskFormModal';
 import ProjectFormModal from '../components/ProjectFormModal';
 import AddMemberModal from '../components/AddMemberModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ActivityFeed from '../components/ActivityFeed';
 import { formatDate } from '../utils/formatDate';
 
 const ProjectDetail = () => {
@@ -266,6 +267,11 @@ const ProjectDetail = () => {
       </div>
 
       <KanbanBoard tasks={tasks} onStatusChange={handleStatusChange} canDrag={canDragTask} />
+
+      <div className="bg-white rounded-xl border border-gray-100 p-5 md:p-6">
+        <h2 className="text-sm font-semibold text-gray-700 mb-2">Activity</h2>
+        <ActivityFeed projectId={id} />
+      </div>
 
       <TaskFormModal
         open={taskModalOpen}

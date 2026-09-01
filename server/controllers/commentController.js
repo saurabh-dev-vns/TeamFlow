@@ -2,6 +2,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const Comment = require('../models/Comment');
 const Task = require('../models/Task');
 const notify = require('../utils/notify');
+const logActivity = require('../utils/logActivity');
 
 // Same access rule used in taskController: admins can touch anything,
 // everyone else must be the project owner or a member.
@@ -38,6 +39,14 @@ const addComment = asyncHandler(async (req, res) => {
 
   const io = req.app.get('io');
   io?.to(`project:${task.project._id}`).emit('comment:new', { taskId: task._id, comment: populated });
+
+  await logActivity(io, {
+    project: task.project._id,
+    task: task._id,
+    user: req.user._id,
+    action: 'COMMENT_ADDED',
+    message: `${req.user.name} commented on "${task.title}"`,
+  });
 
   // Notify the task's assignee and creator (if they aren't the commenter)
   const recipients = new Set(
