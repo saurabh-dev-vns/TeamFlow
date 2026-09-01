@@ -3,6 +3,16 @@ const Comment = require('../models/Comment');
 const Task = require('../models/Task');
 const notify = require('../utils/notify');
 
+// Same access rule used in taskController: admins can touch anything,
+// everyone else must be the project owner or a member.
+const assertProjectAccess = (project, user) => {
+  if (user.role === 'admin') return true;
+  return (
+    String(project.owner) === String(user._id) ||
+    project.members.some((m) => String(m) === String(user._id))
+  );
+};
+
 // @desc    Add a comment to a task
 // @route   POST /api/tasks/:taskId/comments
 // @access  Private
@@ -14,6 +24,9 @@ const addComment = asyncHandler(async (req, res) => {
 
   const task = await Task.findById(req.params.taskId).populate('project');
   if (!task) return res.status(404).json({ message: 'Task not found' });
+
+  const hasAccess = assertProjectAccess(task.project, req.user);
+  if (!hasAccess) return res.status(403).json({ message: 'You do not have access to this task' });
 
   const comment = await Comment.create({
     user: req.user._id,
@@ -50,6 +63,12 @@ const addComment = asyncHandler(async (req, res) => {
 // @route   GET /api/tasks/:taskId/comments
 // @access  Private
 const getComments = asyncHandler(async (req, res) => {
+  const task = await Task.findById(req.params.taskId).populate('project');
+  if (!task) return res.status(404).json({ message: 'Task not found' });
+
+  const hasAccess = assertProjectAccess(task.project, req.user);
+  if (!hasAccess) return res.status(403).json({ message: 'You do not have access to this task' });
+
   const comments = await Comment.find({ task: req.params.taskId })
     .populate('user', 'name avatar')
     .sort({ createdAt: 1 });

@@ -10,12 +10,13 @@ const {
 } = require('../controllers/taskController');
 const { addComment, getComments } = require('../controllers/commentController');
 const { protect, authorize } = require('../middleware/auth');
+const { validate, createTaskRules } = require('../middleware/validators');
 
 const router = express.Router();
 
 router.use(protect);
 
-router.route('/').get(getTasks).post(authorize('admin'), createTask);
+router.route('/').get(getTasks).post(authorize('admin'), createTaskRules, validate, createTask);
 router
   .route('/:id')
   .get(getTaskById)

@@ -9,12 +9,13 @@ const {
   removeMember,
 } = require('../controllers/projectController');
 const { protect, authorize } = require('../middleware/auth');
+const { validate, createProjectRules } = require('../middleware/validators');
 
 const router = express.Router();
 
 router.use(protect);
 
-router.route('/').get(getProjects).post(authorize('admin'), createProject);
+router.route('/').get(getProjects).post(authorize('admin'), createProjectRules, validate, createProject);
 router
   .route('/:id')
   .get(getProjectById)

@@ -12,10 +12,24 @@ const getProjects = asyncHandler(async (req, res) => {
       ? {}
       : { $or: [{ members: req.user._id }, { owner: req.user._id }] };
 
-  const projects = await Project.find(filter)
+  const { page, limit } = req.query;
+  const usePagination = Boolean(page || limit);
+  const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 100);
+
+  let query = Project.find(filter)
     .populate('owner', 'name email avatar')
     .populate('members', 'name email avatar role')
     .sort({ createdAt: -1 });
+
+  if (usePagination) {
+    query = query.skip((pageNum - 1) * pageSize).limit(pageSize);
+  }
+
+  const [projects, total] = await Promise.all([
+    query,
+    usePagination ? Project.countDocuments(filter) : Promise.resolve(null),
+  ]);
 
   // Attach lightweight task stats for each project so the list view can show progress.
   const projectIds = projects.map((p) => p._id);
@@ -35,6 +49,15 @@ const getProjects = asyncHandler(async (req, res) => {
       },
     };
   });
+
+  if (usePagination) {
+    return res.json({
+      projects: withStats,
+      page: pageNum,
+      pages: Math.ceil(total / pageSize) || 1,
+      total,
+    });
+  }
 
   res.json(withStats);
 });
