@@ -8,13 +8,15 @@ const {
   addMember,
   removeMember,
 } = require('../controllers/projectController');
+const { getProjectActivity } = require('../controllers/activityController');
 const { protect, authorize } = require('../middleware/auth');
+const { validate, createProjectRules } = require('../middleware/validators');
 
 const router = express.Router();
 
 router.use(protect);
 
-router.route('/').get(getProjects).post(authorize('admin'), createProject);
+router.route('/').get(getProjects).post(authorize('admin'), createProjectRules, validate, createProject);
 router
   .route('/:id')
   .get(getProjectById)
@@ -23,5 +25,6 @@ router
 
 router.post('/:id/members', authorize('admin'), addMember);
 router.delete('/:id/members/:userId', authorize('admin'), removeMember);
+router.get('/:id/activity', getProjectActivity);
 
 module.exports = router;

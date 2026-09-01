@@ -1,12 +1,12 @@
 const asyncHandler = require('../middleware/asyncHandler');
 const User = require('../models/User');
-const generateToken = require('../utils/generateToken');
+const { generateToken, setTokenCookie, clearTokenCookie } = require('../utils/generateToken');
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
 const register = asyncHandler(async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ message: 'Name, email and password are required' });
@@ -17,15 +17,13 @@ const register = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'An account with this email already exists' });
   }
 
-  // Only allow admin role assignment if explicitly requested; default is member.
-  const user = await User.create({
-    name,
-    email,
-    password,
-    role: role === 'admin' ? 'admin' : 'member',
-  });
+  // SECURITY: role is never taken from the request body on public registration.
+  // Every self-registered account is a plain member; promotion to admin can
+  // only be done by an existing admin via PATCH /api/users/:id/role.
+  const user = await User.create({ name, email, password, role: 'member' });
 
-  const token = generateToken(user._id);
+  const token = generateToken(user);
+  setTokenCookie(res, token);
 
   res.status(201).json({
     token,
@@ -56,7 +54,8 @@ const login = asyncHandler(async (req, res) => {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
-  const token = generateToken(user._id);
+  const token = generateToken(user);
+  setTokenCookie(res, token);
 
   res.json({
     token,
@@ -78,10 +77,13 @@ const getMe = asyncHandler(async (req, res) => {
   res.json({ user: req.user });
 });
 
-// @desc    Logout user (client just discards the token; endpoint kept for symmetry)
+// @desc    Logout user: clears the auth cookie server-side (the JWT itself
+//          is short-lived; see updateProfile for full "log out everywhere"
+//          via tokenVersion invalidation on password change)
 // @route   POST /api/auth/logout
 // @access  Private
 const logout = asyncHandler(async (req, res) => {
+  clearTokenCookie(res);
   res.json({ message: 'Logged out successfully' });
 });
 

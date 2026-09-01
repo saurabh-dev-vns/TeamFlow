@@ -9,13 +9,15 @@ const {
   deleteTask,
 } = require('../controllers/taskController');
 const { addComment, getComments } = require('../controllers/commentController');
+const { getTaskActivity } = require('../controllers/activityController');
 const { protect, authorize } = require('../middleware/auth');
+const { validate, createTaskRules } = require('../middleware/validators');
 
 const router = express.Router();
 
 router.use(protect);
 
-router.route('/').get(getTasks).post(authorize('admin'), createTask);
+router.route('/').get(getTasks).post(authorize('admin'), createTaskRules, validate, createTask);
 router
   .route('/:id')
   .get(getTaskById)
@@ -24,6 +26,7 @@ router
 
 router.patch('/:id/status', updateTaskStatus);
 router.patch('/:id/checklist/:itemId', toggleChecklistItem);
+router.get('/:id/activity', getTaskActivity);
 
 router.route('/:taskId/comments').get(getComments).post(addComment);
 
